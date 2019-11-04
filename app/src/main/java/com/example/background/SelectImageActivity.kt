@@ -119,9 +119,9 @@ class SelectImageActivity : AppCompatActivity() {
                     PackageManager.PERMISSION_GRANTED
 
     override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
+            requestCode: Int,
+            permissions: Array<String>,
+            grantResults: IntArray
     ) {
 
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -132,6 +132,7 @@ class SelectImageActivity : AppCompatActivity() {
 
     /** Image Selection  */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
         if (resultCode == Activity.RESULT_OK) {
             when (requestCode) {
                 REQUEST_CODE_IMAGE -> data?.let { handleImageRequestResult(data) }

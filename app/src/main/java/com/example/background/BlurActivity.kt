@@ -16,6 +16,7 @@
 
 package com.example.background
 
+import android.content.Intent
 import androidx.lifecycle.ViewModelProviders
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
@@ -24,7 +25,10 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.RadioGroup
+import androidx.lifecycle.Observer
+import androidx.work.WorkInfo
 import com.bumptech.glide.Glide
+import timber.log.Timber
 
 
 class BlurActivity : AppCompatActivity() {
@@ -41,17 +45,49 @@ class BlurActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_blur)
         bindResources()
-
         // Get the ViewModel
         viewModel = ViewModelProviders.of(this).get(BlurViewModel::class.java)
-
         // Image uri should be stored in the ViewModel; put it there then display
         val imageUriExtra = intent.getStringExtra(KEY_IMAGE_URI)
         viewModel.setImageUri(imageUriExtra)
         viewModel.imageUri?.let { imageUri ->
             Glide.with(this).load(imageUri).into(imageView)
         }
+        goButton.setOnClickListener {
+            viewModel.applyBlur(blurLevel)
+        }
+        outputButton.setOnClickListener {
+            Timber.d("${viewModel.outputUri}")
+            viewModel.outputUri?.let { currentUri ->
+                val actionView = Intent(Intent.ACTION_VIEW, currentUri)
+                actionView.resolveActivity(packageManager)?.run {
+                    startActivity(actionView)
+                }
+            }
+        }
+        cancelButton.setOnClickListener {
+            viewModel.cancelWork()
+        }
+        viewModel.outputWorkInfos.observe(this, workInfosObserver())
+    }
 
+    private fun workInfosObserver(): Observer<List<WorkInfo>> {
+        return Observer { listOfWorkInfo ->
+            if (listOfWorkInfo.isNullOrEmpty()) {
+                return@Observer
+            }
+            val workInfo = listOfWorkInfo[0]
+            if (workInfo.state.isFinished) {
+                showWorkFinished()
+                val outputImageUri = workInfo.outputData.getString(KEY_IMAGE_URI)
+                if (!outputImageUri.isNullOrEmpty()) {
+                    viewModel.setOutputUri(outputImageUri)
+                    outputButton.visibility = View.VISIBLE
+                }
+            } else {
+                showWorkInProgress()
+            }
+        }
     }
 
     private fun bindResources() {
@@ -80,6 +116,7 @@ class BlurActivity : AppCompatActivity() {
         progressBar.visibility = View.GONE
         cancelButton.visibility = View.GONE
         goButton.visibility = View.VISIBLE
+        outputButton.visibility = View.VISIBLE
     }
 
     private val blurLevel: Int

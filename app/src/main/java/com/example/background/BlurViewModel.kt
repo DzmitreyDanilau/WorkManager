@@ -19,12 +19,23 @@ package com.example.background
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LiveData
+import androidx.work.*
+import com.example.background.workers.BlurWorker
+import com.example.background.workers.CleanupWorker
+import com.example.background.workers.SaveImageToFileWorker
 
 
 class BlurViewModel(application: Application) : AndroidViewModel(application) {
 
     internal var imageUri: Uri? = null
     internal var outputUri: Uri? = null
+    internal val outputWorkInfos: LiveData<List<WorkInfo>>
+    private val workManger = WorkManager.getInstance(application)
+
+    init {
+        outputWorkInfos = workManger.getWorkInfosByTagLiveData(TAG_OUTPUT)
+    }
 
     private fun uriOrNull(uriString: String?): Uri? {
         return if (!uriString.isNullOrEmpty()) {
@@ -34,14 +45,48 @@ class BlurViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Setters
-     */
     internal fun setImageUri(uri: String?) {
         imageUri = uriOrNull(uri)
     }
 
     internal fun setOutputUri(outputImageUri: String?) {
         outputUri = uriOrNull(outputImageUri)
+    }
+
+    internal fun applyBlur(blurLevel: Int) {
+        val constraints = Constraints.Builder()
+                .setRequiresCharging(true)
+                .build()
+        val cleanupRequest = OneTimeWorkRequest.Builder(CleanupWorker::class.java)
+                .addTag(TAG_OUTPUT)
+                .build()
+        var continuation = workManger.beginUniqueWork(
+                IMAGE_MANIPULATION_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                cleanupRequest
+        )
+        for (i in 0 until blurLevel) {
+            val buildBuilder = OneTimeWorkRequestBuilder<BlurWorker>()
+            if (i == 0) {
+                buildBuilder.setInputData(createInputDataForUri())
+            }
+            continuation = continuation.then(buildBuilder.build())
+        }
+        val save = OneTimeWorkRequestBuilder<SaveImageToFileWorker>()
+                .setConstraints(constraints)
+                .build()
+        continuation = continuation.then(save)
+        continuation.enqueue()
+    }
+
+    private fun createInputDataForUri(): Data {
+        val builder = Data.Builder()
+        imageUri?.let {
+            builder.putString(KEY_IMAGE_URI, imageUri.toString())
+        }
+        return builder.build()
+    }
+    internal fun cancelWork(){
+        workManger.cancelUniqueWork(IMAGE_MANIPULATION_WORK_NAME)
     }
 }
